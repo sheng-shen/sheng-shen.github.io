@@ -1,0 +1,22 @@
+.pub-strong {
+    color: #e74c3c;
+    font-weight: bold;
+}
+
+.pub-row li {
+    margin:0 0 10px 0;
+}
+
+.pub-author {
+	font-size: smaller;
+	opacity: 0.8;
+}
+
+.mytitles {
+    padding: 3px;
+    margin-bottom: 5px
+}
+
+.collapse {
+	font-weight: bold;
+}

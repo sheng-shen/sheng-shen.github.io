@@ -1,0 +1,223 @@
+<!--
+    (c) Meta Platforms, Inc. and affiliates. Confidential and proprietary.
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Click</title>
+    <style>
+        * {
+            padding: 0;
+            margin: 0;
+            box-sizing: border-box;
+        }
+
+        .start-screen {
+            background: white;
+            position: absolute;
+            top: 0;
+            right: 0;
+            left: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .start-screen button,
+        .start-screen select,
+        .start-screen p {
+            font-size: 4rem;
+            padding: 1.5rem 1.75rem;
+            text-align: center;
+            font-family: sans-serif;
+        }
+
+        .start-screen button {
+            margin-bottom: 1rem;
+        }
+
+        .experience-screen button {
+            position: absolute;
+            background-color: #008CBA;
+        }
+
+        button {
+            cursor: pointer;
+        }
+
+        .timer,
+        .seed,
+        .method {
+            position: absolute;
+            color: #EFEFEF;
+            font-size: 4rem;
+            font-family: sans-serif;
+        }
+
+        .timer {
+            top: 1rem;
+            left: 1rem;
+        }
+
+        .seed {
+            bottom: 1rem;
+            left: 1rem;
+        }
+
+        .method {
+            bottom: 1rem;
+            right: 1rem;
+        }
+
+        .start-controls {
+            display: flex;
+            flex-direction: column;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="experience-screen" class="experience-screen" style="display: none;">
+        <div id="timer" class="timer"></div>
+        <div id="seed" class="seed"></div>
+        <div id="method" class="method"></div>
+        <button id="target-button" class="button"></button>
+    </div>
+
+    <div class="start-screen" id="start-screen">
+        <div class="start-controls">
+            <button id="start-button">Start</button>
+            <select id="method-select" name="choice">
+                <option value="single">Left Click</option>
+                <option value="double">Double Click</option>
+                <option value="secondary">Right Click</option>
+            </select>
+            <p id="start-text" style="font-size: 2rem"> </p>
+        </div>
+    </div>
+    <script type="text/javascript">
+        /***********************************************************************
+         settings
+        ***********************************************************************/
+        const EXPERIENCE_DURATION_IN_MSECONDS = 20_000;
+        const BUTTON_SIZE = 0.02; // Button size as a fraction of the viewport width
+        const BUTTON_MOVE_MARGIN = 0.1; // Margin around the sides of the screen where button won't go
+
+        const startButton = document.getElementById('start-button');
+        const targetButton = document.getElementById('target-button');
+        const experienceScreen = document.getElementById('experience-screen');
+        const startScreen = document.getElementById('start-screen');
+        const timer = document.getElementById('timer');
+        const seed = document.getElementById('seed');
+        const method = document.getElementById('method');
+        const methodSelect = document.getElementById('method-select');
+        const startText = document.getElementById('start-text');
+
+        clickMethod = '';
+        timeRemaining = 0;
+        successfulClicks = 0;
+
+        /***********************************************************************
+         utils
+        ***********************************************************************/
+        function checkClick(e) {
+            switch (clickMethod) {
+                case 'single': {
+                    return true;
+                }
+                case 'double': {
+                    return e.detail === 2;
+                }
+                case 'secondary': {
+                    return e.which === 3;
+                }
+            }
+            return false;
+        }
+
+        /***********************************************************************
+         "main"
+        ***********************************************************************/
+
+        const button_handler = (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            if (!checkClick(e))
+                return;
+
+            moveTargetButton();
+            successfulClicks += 1;
+            console.log(`click ${successfulClicks}`);
+        }
+
+        function getRandomRange(min, max) {
+            return Math.random() * (max - min) + min;
+        }
+
+        function moveTargetButton() {
+            const buttonSize = window.innerWidth * BUTTON_SIZE;
+
+
+            const randomX = Math.floor(getRandomRange(BUTTON_MOVE_MARGIN, 1 - BUTTON_MOVE_MARGIN) * window.innerWidth);
+            const randomY = Math.floor(getRandomRange(BUTTON_MOVE_MARGIN, 1 - BUTTON_MOVE_MARGIN) * window.innerHeight);
+
+            targetButton.style.left = `${randomX}px`
+            targetButton.style.top = `${randomY}px`
+            targetButton.style.height = `${buttonSize}px`;
+            targetButton.style.width = `${buttonSize}px`;
+        }
+
+        function startExperience() {
+            moveTargetButton();
+            successfulClicks = 0;
+
+            startScreen.style.display = "none";
+            experienceScreen.style.display = "";
+            clickMethod = methodSelect.value;
+
+            // seed.innerText = 'sup';
+            method.innerText = clickMethod;
+
+            timeRemaining = EXPERIENCE_DURATION_IN_MSECONDS;
+            let previousTimestamp = null;
+
+            function loop(timestamp) {
+                if (!previousTimestamp)
+                    previousTimestamp = timestamp;
+
+                const dt = timestamp - previousTimestamp;
+                previousTimestamp = timestamp;
+                timeRemaining = Math.max(0, timeRemaining - dt);
+                timer.innerText = (timeRemaining / 1000).toFixed(2);
+                if (timeRemaining === 0) {
+                    endExperience();
+                    return;
+                }
+                window.requestAnimationFrame(loop);
+            }
+            window.requestAnimationFrame(loop);
+        }
+
+        function endExperience() {
+            experienceScreen.style.display = "none";
+            startScreen.style.display = "";
+            timeRemaining = 0;
+            clicksPerSec = (successfulClicks / EXPERIENCE_DURATION_IN_MSECONDS * 1000).toFixed(2);
+            startText.innerText = `${clicksPerSec} clicks/sec`;
+        }
+
+
+        targetButton.addEventListener('click', button_handler);
+        targetButton.addEventListener('contextmenu', button_handler);
+        startButton.addEventListener('click', startExperience);
+
+    </script>
+</body>
+
+</html>

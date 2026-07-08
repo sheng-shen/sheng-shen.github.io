@@ -1,0 +1,41 @@
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    background-color: #f0f0f0;
+}
+.editable-box {
+    width: 80%;
+    height: 80vh;
+    border: 2px solid #ccc;
+    padding: 10px;
+    border-radius: 20px;
+    background-color: #fff;
+    overflow-y: auto;
+    outline: none;
+    font-size: 24px;
+    line-height: 1.5;
+    letter-spacing: 2px;
+    font-family: 'Lucida Console', monospace;
+    position: relative;
+    caret-color: transparent; /* Hide the default caret */
+}
+.custom-caret {
+    position: absolute;
+    width: 4px;
+    background-color: Blue;
+    justify-content: center;
+    animation: blink 1s step-end infinite;
+    pointer-events: none; /* Make the caret non-interactive */
+}
+@keyframes blink {
+    from, to {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0;
+    }
+}

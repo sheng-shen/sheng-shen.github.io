@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scrolling Speed Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #F7F7F7; /* Light grey background */
+        }
+        
+        .button {
+            position: absolute;
+            padding: 10px;
+            border: none;
+            border-radius: 20px;
+            background-color: #0097A7; /* Teal blue color */
+            color: white;
+            cursor: pointer;
+            width: 100px; /* Updated width */
+        }
+        
+        .button:hover {
+            background-color: #00687F; /* Darker teal blue color on hover */
+        }
+        
+        .start-button {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 60px; /* 3x as big */
+            border: none;
+            border-radius: 10px;
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+        }
+        
+        .start-button:hover {
+            background-color: #3e8e41;
+        }
+        
+        .spacer {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: white;
+        }
+        
+        .scroll-down-text {
+            position: absolute;
+            font-size: 24px;
+            color: black;
+        }
+    </style>
+</head>
+<body>
+    <button id="start-button" class="start-button">Start Test</button>
+    <div id="buttons"></div>
+    <script>
+    let startTime;
+    let scrollAmount = 10000; // total scroll amount in pixels
+    let numButtons = 10;
+    let buttonWidth = 100; // width of the button in pixels
+    let buttonHeight = 60; // height of the button in pixels
+    let screenWidth = window.innerWidth;
+    let screenHeight = window.innerHeight;
+    let currentButton = 0;
+    let score;
+    let accuracy = 100; // initial accuracy score
+    let missedClicks = 0; // number of missed clicks
+
+    document.getElementById('start-button').addEventListener('click', startTest);
+
+    function startTest() {
+        let button = document.getElementById('start-button');
+        button.textContent = `Scroll Down ↓`; // Update button text to "Scroll Down"
+        startTime = new Date().getTime();
+        createButton();
+        document.addEventListener('click', checkAccuracy);
+    }
+
+    function createButton() {
+        if (currentButton >= numButtons) {
+            endTest();
+            return;
+        }
+        let button = document.createElement('button');
+        button.className = 'button';
+        button.textContent = `${currentButton + 1} Click Here`; // Add button number and text
+        button.style.top = `${screenHeight + ((scrollAmount / numButtons) * currentButton)}px`;
+        button.style.left = `${Math.random() * (screenWidth - buttonWidth)}px`;
+        button.addEventListener('click', () => {
+            currentButton++;
+            if (currentButton < numButtons) {
+                button.textContent = `Scroll Down ↓`; // Update button text to "Scroll Down"
+            } else {
+                button.textContent = `Finished!`; // Update button text to "Finished!" for the last button
+            }
+            setTimeout(() => {
+                createButton();
+            }, 0); // Wait for 0 seconds before creating the next button
+        });
+        document.getElementById('buttons').appendChild(button);
+        let spacer = document.createElement('span');
+        spacer.className = 'spacer';
+        spacer.style.top = `${parseInt(button.style.top) + buttonHeight * 2}px`;
+        spacer.style.left = `${screenWidth - 10}px`;
+        document.body.appendChild(spacer);
+    }
+
+    function checkAccuracy(event) {
+        if (event.target.tagName !== 'BUTTON') {
+            accuracy -= 10; // subtract 10% from accuracy score for each missed click
+            missedClicks++;
+        }
+    }
+
+    function endTest() {
+        score = (new Date().getTime() - startTime) / 1000; // convert milliseconds to seconds
+        alert(`Your time is ${score.toFixed(2)} seconds\nYour accuracy is ${accuracy}% (${missedClicks} missed clicks)`);
+        document.removeEventListener('click', checkAccuracy);
+    }
+    
+    </script>
+</body>
+</html>

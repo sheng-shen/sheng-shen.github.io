@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raycast Test</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        main {
+            display: flex;
+            flex-wrap: wrap;
+            width: 100vw;
+            height: 100vh;
+            background: #EFEFEF;
+            position: relative;
+        }
+
+        .container {
+            border: 2px solid #ccc;
+            border-radius: 5px;
+            padding: 2rem;
+            width: calc(95vw - 2rem);
+            height: calc(95vh - 2rem);
+            margin: 1rem;
+            background: #FFF;
+        }
+
+        .center {
+            background: #fff63f;
+            border-radius: 50%;
+            height: 70px;
+            width: 70px;
+            position: absolute;
+            top: calc(50% - 35px);
+            left: calc(50% - 35px);
+            border: 2px solid #ffa22a;
+            cursor: pointer;
+        }
+
+        .center:hover {
+            background: #ffa22a;
+        }
+
+        .text .scrollable {
+            width: 100%;
+            height: 100%;
+            overflow-y: auto;
+            font-size: 2.25rem;
+            line-height: 1.5;
+        }
+
+        .text p {
+            margin-bottom: 2rem;
+        }
+
+        .highlight {
+            background: #edff78;
+        }
+
+        canvas {
+            /* border: 5px dashed #333;
+            border-radius: 10px; */
+            cursor: crosshair;
+        }
+
+        .paint {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .timer {
+            top: 5rem;
+            left: 5rem;
+            position: absolute;
+            color: #757575;
+            font-size: 3rem;
+            font-family: sans-serif;
+        }
+    </style>
+</head>
+
+<body>
+    <main>
+        <div id="timer" class="timer"></div>
+        <div class="paint">
+            <canvas id="canvas"><canvas>
+        </div>
+    </main>
+    <script type="text/javascript">
+        const canvas = document.getElementById('canvas');
+        const context = canvas.getContext('2d');
+        const brushSize = 10;
+        let lastPos = null;
+        let targetPos = { x: ((Math.random() * 0.9) + 0.05) * canvas.width, y: ((Math.random() * 0.9) + 0.05) * canvas.height };
+        const targetRadius = 20;
+        let targetCounter = 0;
+        let firstHitTime = null;
+
+        function drawTarget() {
+            context.fillStyle = 'red';
+            context.beginPath();
+            context.arc(targetPos.x, targetPos.y, targetRadius, 0, 2 * Math.PI);
+            context.fill();
+        }
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth * 0.9;
+            canvas.height = window.innerHeight * 0.9;
+        }
+        window.onload = function () { resizeCanvas(); drawTarget(); };
+        window.onresize = resizeCanvas;
+
+
+        let drawing = false;
+        function startDrawing(e) {
+            drawing = true;
+            lastPos = { x: e.clientX, y: e.clientY };
+        }
+        function stopDrawing() {
+            drawing = false;
+            lastPos = null;
+        }
+        function draw(e) {
+            if (drawing) {
+                const canvasPosition = e.target.getBoundingClientRect();
+
+                const currentPos = {
+                    x: e.clientX - canvasPosition.left,
+                    y: e.clientY - canvasPosition.top
+                };
+                context.lineWidth = brushSize;
+                context.strokeStyle = '#333';
+                context.beginPath();
+                context.moveTo(lastPos.x - canvasPosition.left, lastPos.y - canvasPosition.top);
+                context.lineTo(currentPos.x, currentPos.y);
+                context.stroke();
+                lastPos = { x: e.clientX, y: e.clientY };
+
+                // Check if the user has dragged over the target
+                const dx = currentPos.x - targetPos.x;
+                const dy = currentPos.y - targetPos.y;
+                if (Math.sqrt(dx * dx + dy * dy) < targetRadius) {
+                    targetPos = { x: ((Math.random() * 0.9) + 0.05) * canvas.width, y: ((Math.random() * 0.9) + 0.05) * canvas.height };    // Move the target to a random position
+                    drawTarget();
+
+                    if (firstHitTime == null) {
+                        firstHitTime = Date.now();
+                    } else {
+                        targetCounter++;
+                        let deltaTime = Date.now() - firstHitTime;
+                        document.getElementById('timer').innerHTML = '' + (deltaTime / targetCounter / 1000).toFixed(2) + ' sec/target';
+                    }
+                }
+
+            }
+        }
+
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('touchstart', startDrawing);
+        document.addEventListener('mouseup', stopDrawing);
+        document.addEventListener('touchend', stopDrawing);
+        document.addEventListener('mousemove', draw);
+        document.addEventListener('touchmove', draw);
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,302 @@
+<!--
+    (c) Meta Platforms, Inc. and affiliates. Confidential and proprietary.
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Click</title>
+    <style>
+        * {
+            padding: 0;
+            margin: 0;
+            box-sizing: border-box;
+        }
+
+        .start-screen {
+            background: white;
+            position: absolute;
+            top: 0;
+            right: 0;
+            left: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .start-screen button,
+        .start-screen select {
+            font-size: 4rem;
+            padding: 1.5rem 1.75rem;
+            text-align: center;
+        }
+
+        .start-screen button {
+            margin-bottom: 1rem;
+        }
+
+        body.running .start-screen {
+            display: none;
+        }
+
+        .experience-screen button {
+            position: absolute;
+        }
+
+        button {
+            cursor: pointer;
+        }
+
+        .experience-container {
+            position: absolute;
+        }
+
+        .experience-button {
+            opacity: 0;
+            transition: all .1s ease-in-out forwards;
+        }
+
+        .experience-button.active {
+            opacity: 1;
+        }
+
+        .timer,
+        .seed,
+        .method {
+            position: absolute;
+            color: #727272;
+            font-size: 4rem;
+            font-family: sans-serif;
+        }
+
+        .timer {
+            top: 1rem;
+            left: 1rem;
+        }
+
+        .seed {
+            bottom: 1rem;
+            left: 1rem;
+        }
+
+        .method {
+            bottom: 1rem;
+            right: 1rem;
+        }
+
+        .start-controls {
+            display: flex;
+            flex-direction: column;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="timer" class="timer"></div>
+    <div id="seed" class="seed"></div>
+    <div id="method" class="method"></div>
+    <div id="experience-screen" class="experience-screen"></div>
+    <div class="start-screen">
+        <div class="start-controls">
+            <button id="start-button">Start</button>
+            <select id="method-select" name="choice">
+                <option value="single">Left Click</option>
+                <option value="double">Double Click</option>
+                <option value="secondary">Right Click</option>
+            </select>
+        </div>
+    </div>
+    <script type="text/javascript">
+        /***********************************************************************
+         utils
+        ***********************************************************************/
+        // NOTE(andrew): Create 128bit hash from seed
+        function cyrb128(str) {
+            let h1 = 1779033703, h2 = 3144134277,
+                h3 = 1013904242, h4 = 2773480762;
+            for (let i = 0, k; i < str.length; i++) {
+                k = str.charCodeAt(i);
+                h1 = h2 ^ Math.imul(h1 ^ k, 597399067);
+                h2 = h3 ^ Math.imul(h2 ^ k, 2869860233);
+                h3 = h4 ^ Math.imul(h3 ^ k, 951274213);
+                h4 = h1 ^ Math.imul(h4 ^ k, 2716044179);
+            }
+            h1 = Math.imul(h3 ^ (h1 >>> 18), 597399067);
+            h2 = Math.imul(h4 ^ (h2 >>> 22), 2869860233);
+            h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213);
+            h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179);
+            h1 ^= (h2 ^ h3 ^ h4), h2 ^= h1, h3 ^= h1, h4 ^= h1;
+            return [h1 >>> 0, h2 >>> 0, h3 >>> 0, h4 >>> 0];
+        }
+        // NOTE(andrew): "simple fast counter" seeded PRNG (32 bit)
+        function sfc32(a, b, c, d) {
+            return function () {
+                a |= 0; b |= 0; c |= 0; d |= 0;
+                var t = (a + b | 0) + d | 0;
+                d = d + 1 | 0;
+                a = b ^ b >>> 9;
+                b = c + (c << 3) | 0;
+                c = (c << 21 | c >>> 11);
+                c = c + t | 0;
+                return (t >>> 0) / 4294967296;
+            }
+        }
+        function shuffleArrayInPlace(array, random) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+        function checkClick(e, clickMethod) {
+            switch (clickMethod) {
+                case 'single': {
+                    return true;
+                }
+                case 'double': {
+                    return e.detail === 2;
+                }
+                case 'secondary': {
+                    return e.which === 3;
+                }
+            }
+            return false;
+        }
+        /***********************************************************************
+         settings
+        ***********************************************************************/
+        const EXPERIENCE_DURATION_IN_MSECONDS = 30_000;
+        const BUTTON_ROWS = 10;
+        const BUTTON_COLUMNS = 10;
+        /***********************************************************************
+         "main"
+        ***********************************************************************/
+        (() => {
+            const experienceState = {
+                seededRandom: null,
+                running: false,
+                timeRemaining: 0,
+                boxes_clicked: 0,
+            };
+            const experienceElements = {
+                startButton: document.getElementById('start-button'),
+                experienceScreen: document.getElementById('experience-screen'),
+                timer: document.getElementById('timer'),
+                seed: document.getElementById('seed'),
+                method: document.getElementById('method'),
+                methodSelect: document.getElementById('method-select'),
+                body: document.body
+            }
+            function createButton(gridX, gridY) {
+                const cellWidth = window.innerWidth / BUTTON_ROWS;
+                const cellHeight = window.innerHeight / BUTTON_ROWS;
+                const maxXOffset = cellWidth / 4;
+                const maxYOffset = cellHeight / 4;
+                const xOffset = maxXOffset * experienceState.seededRandom();
+                const yOffset = maxYOffset * experienceState.seededRandom();
+                const xOffsetDirection = experienceState.seededRandom() < 0.5 ?
+                    1 : -1;
+                const yOffsetDirection = experienceState.seededRandom() < 0.5 ?
+                    1 : -1;
+                // NOTE(andrew): The container is the grid cell, useful for
+                // debugging
+                const container = document.createElement('div');
+                container.classList.add('experience-container');
+                container.style.height = `${cellHeight}px`
+                container.style.top = `${gridY * cellHeight}px`
+                container.style.width = `${cellWidth}px`
+                container.style.left = `${gridX * cellWidth}px`
+                experienceElements.experienceScreen.appendChild(container);
+                const button = document.createElement('button');
+                button.classList.add('experience-button');
+                button.innerText = `${gridX}, ${gridY}`;
+                button.style.left = `${maxXOffset + xOffset * xOffsetDirection
+                    }px`
+                button.style.top = `${maxYOffset + yOffset * yOffsetDirection
+                    }px`
+                button.style.height = `${cellHeight / 2}px`;
+                button.style.width = `${cellWidth / 2}px`;
+                container.appendChild(button);
+                return button;
+            }
+            function startExperience() {
+                experienceElements.body.classList.add('running');
+                experienceState.running = true;
+                const seedString = Date.now().toString();
+                experienceElements.seed.innerText = seedString;
+                const clickMethod = experienceElements.methodSelect.value;
+                experienceElements.method.innerText = clickMethod;
+                const seed = cyrb128(seedString);
+                experienceState.seededRandom = sfc32(...seed);
+                const buttons = [];
+                for (let gridY = 0; gridY < BUTTON_COLUMNS; gridY++) {
+                    for (let gridX = 0; gridX < BUTTON_ROWS; gridX++) {
+                        buttons.push(createButton(gridX, gridY));
+                    }
+                }
+                shuffleArrayInPlace(buttons, experienceState.seededRandom);
+                buttons.forEach((button, i) => {
+                    const handler = (e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        if (!checkClick(e, clickMethod)) return;
+                        button.classList.remove('active');
+                        if (buttons[i + 1]) {
+                            buttons[i + 1].classList.add('active');
+                        } else {
+                            endExperience();
+                        }
+                        experienceState.boxes_clicked += 1;
+                        experienceElements.seed.innerText = (experienceState.boxes_clicked * 1000 / (EXPERIENCE_DURATION_IN_MSECONDS - experienceState.timeRemaining))
+                            .toFixed(2);
+                    }
+                    button.addEventListener('click', handler);
+                    button.addEventListener('contextmenu', handler);
+                })
+                buttons[0].classList.add('active');
+                experienceState.timeRemaining = EXPERIENCE_DURATION_IN_MSECONDS;
+                let previousTimestamp = null;
+                function loop(timestamp) {
+                    if (!previousTimestamp) previousTimestamp = timestamp;
+                    const dt = timestamp - previousTimestamp;
+                    previousTimestamp = timestamp;
+                    experienceState.timeRemaining = Math.max(
+                        0,
+                        experienceState.timeRemaining - dt
+                    );
+                    timer.innerText = (experienceState.timeRemaining / 1000)
+                        .toFixed(2);
+                    if (experienceState.timeRemaining === 0) {
+                        endExperience();
+                        return;
+                    }
+                    window.requestAnimationFrame(loop);
+                }
+                window.requestAnimationFrame(loop);
+            }
+            function endExperience() {
+                experienceElements.body.classList.remove('running');
+                experienceState.running = true;
+                experienceState.seededRandom = null;
+                experienceState.timeRemaining = 0;
+                experienceState.boxes_clicked = 0;
+                experienceElements.experienceScreen.innerHTML = '';
+                experienceElements.timer.innerHTML = '';
+                experienceElements.seed.innerHTML = '';
+            }
+            function bindControls() {
+                experienceElements.startButton.addEventListener(
+                    'click',
+                    startExperience
+                );
+            }
+            bindControls();
+        })();
+    </script>
+</body>
+
+</html>

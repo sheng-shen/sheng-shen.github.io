@@ -83,7 +83,15 @@ function resetTrialData() {
 // Event listener for mouse movement
 document.addEventListener('mousemove', () => {
 	const currentMousePosition = { x: event.clientX, y: event.clientY };
-	EventLogger.updateCursorPosition(event.clientX, event.clientY);
+	var svgRect = testAreaSVG.node().getBoundingClientRect();
+	var svgX = event.clientX - svgRect.left;
+	var svgY = event.clientY - svgRect.top;
+	var target = fittsTest.target;
+	var dist = distance({x: svgX, y: svgY}, target) - (target.w / 2);
+	EventLogger.updateCursorPosition(event.clientX, event.clientY, {
+		targetIndex: fittsTest.currentPosition,
+		distanceToTarget: Math.max(0, Math.round(dist))
+	});
 	if (lastMousePosition.x === currentMousePosition.x && lastMousePosition.y === currentMousePosition.y) {
         return;
     }
@@ -94,7 +102,7 @@ document.addEventListener('mousemove', () => {
         isMoving = true;
         dragCount++;
         console.log(`Drag Count: ${dragCount}`);
-        EventLogger.logEvent('movement_start', { x: currentMousePosition.x, y: currentMousePosition.y });
+        EventLogger.logEvent('movement_start', { x: currentMousePosition.x, y: currentMousePosition.y, targetIndex: fittsTest.currentPosition });
     }
 
     // Reset the stop timeout for every movement
@@ -103,7 +111,7 @@ document.addEventListener('mousemove', () => {
     // Set a timeout to detect when the mouse stops
     stopTimeout = setTimeout(() => {
         isMoving = false;
-        EventLogger.logEvent('movement_stop', { x: lastMousePosition.x, y: lastMousePosition.y });
+        EventLogger.logEvent('movement_stop', { x: lastMousePosition.x, y: lastMousePosition.y, targetIndex: fittsTest.currentPosition });
     }, 100);
 });
 
@@ -218,7 +226,7 @@ var fittsTest = {
 
 		if (isHit) {
 			this.clicksOnTarget++;
-			EventLogger.logEvent('click_target', { x: x, y: y, targetX: this.target.x, targetY: this.target.y, targetRadius: this.target.w / 2 });
+			EventLogger.logEvent('click_target', { x: x, y: y, targetX: this.target.x, targetY: this.target.y, targetRadius: this.target.w / 2, targetIndex: this.currentPosition });
 			if (!this.active) {
 				console.log('start active');
 				startTimer();
@@ -250,7 +258,7 @@ var fittsTest = {
 		}
 		else {
 			this.miss++;
-			EventLogger.logEvent('click_miss', { x: x, y: y, targetX: this.target.x, targetY: this.target.y, targetRadius: this.target.w / 2 });
+			EventLogger.logEvent('click_miss', { x: x, y: y, targetX: this.target.x, targetY: this.target.y, targetRadius: this.target.w / 2, targetIndex: this.currentPosition });
 		}
 	},
 
@@ -274,10 +282,10 @@ var fittsTest = {
 				this.targetEntries++;
 				this.isInsideTarget = true;
 				console.log("Target entered: " + this.targetEntries);
-				EventLogger.logEvent('cursor_enter_target', { cursorX: x, cursorY: y, targetX: this.target.x, targetY: this.target.y, targetRadius: this.target.w / 2 });
+				EventLogger.logEvent('cursor_enter_target', { cursorX: x, cursorY: y, targetX: this.target.x, targetY: this.target.y, targetRadius: this.target.w / 2, targetIndex: this.currentPosition });
 			} else if (!isInsideTarget && this.isInsideTarget) {
 				this.isInsideTarget = false;
-				EventLogger.logEvent('cursor_exit_target', { cursorX: x, cursorY: y, targetX: this.target.x, targetY: this.target.y, targetRadius: this.target.w / 2 });
+				EventLogger.logEvent('cursor_exit_target', { cursorX: x, cursorY: y, targetX: this.target.x, targetY: this.target.y, targetRadius: this.target.w / 2, targetIndex: this.currentPosition });
 			} else if (!isInsideTarget) {
 				this.isInsideTarget = false;
 			}

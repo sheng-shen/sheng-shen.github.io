@@ -12,6 +12,10 @@ const ZOOM_TARGET_SCALE_MIN = 0.55;
 const ZOOM_TARGET_SCALE_MAX = 1.8;
 const ZOOM_OUTLINE_BORDER_PX = 3;
 
+if (typeof _warnIfNoEventLogger === 'undefined') {
+    _warnIfNoEventLogger = function() { return false; };
+}
+
 let zoomCurrentScale = 1.0;
 let zoomTargetSize = 0;
 let zoomMinSize = 0;
@@ -21,6 +25,17 @@ let zoomHoldTimeout = null;
 let touchStartDist = 0;
 let touchStartZoomScale = 1.0;
 const TOUCH_ZOOM_SENSITIVITY = 1 / 2.5;
+
+function _getZoomData() {
+    return {
+        targetIndex: successfulClicks,
+        currentSize: zoomInnerBaseSize * zoomCurrentScale,
+        zoomTargetSize: zoomTargetSize,
+        zoomMinSize: zoomMinSize,
+        zoomMaxSize: zoomMaxSize,
+        zoomCurrentScale: zoomCurrentScale
+    };
+}
 
 // CTRL+scroll wheel — zoom only with CTRL held (ignore plain mouse scroll)
 document.addEventListener('wheel', (e) => {
@@ -46,7 +61,7 @@ document.addEventListener('touchstart', (e) => {
 document.addEventListener('touchmove', (e) => {
     if (e.touches.length === 2) {
         e.preventDefault();
-        trackGesture();
+        trackGesture(200, 'zoom', _getZoomData);
         const dist = touchDist(e);
         const ratio = dist / touchStartDist;
         const dampenedRatio = 1 + (ratio - 1) * TOUCH_ZOOM_SENSITIVITY;
@@ -65,7 +80,7 @@ document.addEventListener('gesturestart', (e) => {
 
 document.addEventListener('gesturechange', (e) => {
     e.preventDefault();
-    trackGesture();
+    trackGesture(200, 'zoom', _getZoomData);
     const dampenedScale = 1 + (e.scale - 1) * TOUCH_ZOOM_SENSITIVITY;
     zoomCurrentScale = touchStartZoomScale * dampenedScale;
     zoomCurrentScale = Math.max(ZOOM_MIN_SCALE, Math.min(ZOOM_MAX_SCALE, zoomCurrentScale));
@@ -77,7 +92,7 @@ document.addEventListener('gestureend', (e) => e.preventDefault());
 
 function applyZoomDelta(deltaY, deltaMode) {
     if (!zoomInnerBaseSize) return;
-    trackGesture();
+    trackGesture(200, 'zoom', _getZoomData);
 
     let normalizedDeltaY = deltaY;
     if (deltaMode === 1) {
@@ -143,7 +158,17 @@ function checkZoomMatch() {
     }
 
     const currentSize = zoomInnerBaseSize * zoomCurrentScale;
-    if (currentSize >= zoomMinSize && currentSize <= zoomMaxSize) {
+    const inBounds = currentSize >= zoomMinSize && currentSize <= zoomMaxSize;
+
+    if (inBounds && _warnIfNoEventLogger() && !EventLogger.getIsInZoomTarget()) {
+        EventLogger.setIsInZoomTarget(true);
+        EventLogger.logEvent('zoom_enter_target', { targetIndex: successfulClicks, currentSize: currentSize, zoomTargetSize: zoomTargetSize, zoomMinSize: zoomMinSize, zoomMaxSize: zoomMaxSize, zoomCurrentScale: zoomCurrentScale });
+    } else if (!inBounds && _warnIfNoEventLogger() && EventLogger.getIsInZoomTarget()) {
+        EventLogger.setIsInZoomTarget(false);
+        EventLogger.logEvent('zoom_exit_target', { targetIndex: successfulClicks, currentSize: currentSize, zoomTargetSize: zoomTargetSize, zoomMinSize: zoomMinSize, zoomMaxSize: zoomMaxSize, zoomCurrentScale: zoomCurrentScale });
+    }
+
+    if (inBounds) {
         zoomHoldTimeout = setTimeout(() => {
             const recheckSize = zoomInnerBaseSize * zoomCurrentScale;
             if (recheckSize >= zoomMinSize && recheckSize <= zoomMaxSize) {
@@ -154,10 +179,10 @@ function checkZoomMatch() {
 }
 
 function onZoomSuccess() {
-    // Guard against duplicate submissions from lingering scroll/touch events
     if (successfulClicks >= MAX_ZOOM_TRIALS) return;
     successfulClicks += 1;
     playChime(true);
+    if (_warnIfNoEventLogger()) EventLogger.logEvent('zoom_success', { targetIndex: successfulClicks, zoomCurrentScale: zoomCurrentScale, currentSize: zoomInnerBaseSize * zoomCurrentScale, zoomTargetSize: zoomTargetSize, successfulClicks: successfulClicks });
 
     if (successfulClicks >= MAX_ZOOM_TRIALS) {
         document.getElementById('start-screen').style.display = "";
@@ -167,9 +192,17 @@ function onZoomSuccess() {
         let elapsedStr = (elapsed / 1000).toFixed(2);
         startText.innerText = `#${trialNum}, TTC: ${elapsedStr}s, Gestures: ${gestureCount}\n` + startText.innerText;
         submitForm(trialNum, elapsedStr, gestureCount);
+        if (_warnIfNoEventLogger()) {
+            EventLogger.endTrial({ trialNum: trialNum, timeToComplete: elapsedStr, gestureCount: gestureCount });
+            EventLogger.downloadLog();
+            EventLogger.clearLog();
+        }
         trialNum += 1;
     } else {
         generateZoomTarget();
+        if (_warnIfNoEventLogger()) {
+            EventLogger.setIsInZoomTarget(false);
+        }
     }
 }
 
@@ -181,6 +214,16 @@ function startZoomExperience() {
 
     zoomCurrentScale = 1.0;
     zoomInnerBaseSize = Math.min(window.innerWidth, window.innerHeight) * 0.25;
+
+    if (_warnIfNoEventLogger()) {
+        EventLogger.startSession({
+            participantId: document.getElementById('button-pad-id').value,
+            trialType: 'zoom',
+            sessionId: sessionId
+        });
+        EventLogger.startTrial(1);
+        EventLogger.setIsInZoomTarget(false);
+    }
 
     document.getElementById('start-screen').style.display = "none";
     document.getElementById('zoom-body').style.display = "";

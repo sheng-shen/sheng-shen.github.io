@@ -47,6 +47,15 @@ let conditionValue;
 // Session ID read from URL parameter
 let sessionId;
 
+let _eventLoggerWarnShown = false;
+function _warnIfNoEventLogger() {
+    if (typeof EventLogger === 'undefined' && !_eventLoggerWarnShown) {
+        console.warn('[UXR] EventLogger is not loaded — event logging is inactive. Add ?eventLog=true to enable.');
+        _eventLoggerWarnShown = true;
+    }
+    return typeof EventLogger !== 'undefined';
+}
+
 const experienceScreen = document.getElementById('experience-screen');
 const startScreen = document.getElementById('start-screen');
 const startButton = document.getElementById('start-button');
@@ -70,6 +79,17 @@ function resetTrialData() {
 // Event listener for mouse movement
 document.addEventListener('mousemove', () => {
 	const currentMousePosition = { x: event.clientX, y: event.clientY };
+	if (_warnIfNoEventLogger()) {
+		var svgRect = testAreaSVG.node().getBoundingClientRect();
+		var svgX = event.clientX - svgRect.left;
+		var svgY = event.clientY - svgRect.top;
+		var target = fittsTest.target;
+		var dist = distance({x: svgX, y: svgY}, target) - (target.w / 2);
+		EventLogger.updateCursorPosition(event.clientX, event.clientY, {
+			targetIndex: fittsTest.currentPosition,
+			distanceToTarget: Math.max(0, Math.round(dist))
+		});
+	}
 	if (lastMousePosition.x === currentMousePosition.x && lastMousePosition.y === currentMousePosition.y) {
         return;
     }
@@ -77,10 +97,10 @@ document.addEventListener('mousemove', () => {
 	lastMousePosition = currentMousePosition;
 
     if (!isMoving) {
-        // Mouse just started moving
         isMoving = true;
-        dragCount++; // Increment drag count for this new movement
+        dragCount++;
         console.log(`Drag Count: ${dragCount}`);
+        if (_warnIfNoEventLogger()) EventLogger.logEvent('movement_start', { x: currentMousePosition.x, y: currentMousePosition.y, targetIndex: fittsTest.currentPosition });
     }
 
     // Reset the stop timeout for every movement
@@ -88,8 +108,9 @@ document.addEventListener('mousemove', () => {
 
     // Set a timeout to detect when the mouse stops
     stopTimeout = setTimeout(() => {
-        isMoving = false; // Mouse has stopped
-    }, 100); // Adjust timeout duration as needed
+        isMoving = false;
+        if (_warnIfNoEventLogger()) EventLogger.logEvent('movement_stop', { x: lastMousePosition.x, y: lastMousePosition.y, targetIndex: fittsTest.currentPosition });
+    }, 100);
 });
 
 function v(v) {
@@ -201,8 +222,9 @@ var fittsTest = {
 		this.clicksTotal++;
 		//updateClickCounts(isHit); // Update the click counts
 
-		if (isHit) {
+	if (isHit) {
 			this.clicksOnTarget++;
+			if (_warnIfNoEventLogger()) EventLogger.logEvent('click_target', { x: x, y: y, targetX: this.target.x, targetY: this.target.y, targetRadius: this.target.w / 2, targetIndex: this.currentPosition });
 			if (!this.active) {
 				console.log('start active');
 				startTimer();
@@ -234,6 +256,7 @@ var fittsTest = {
 		}
 		else {
 			this.miss++;
+			if (_warnIfNoEventLogger()) EventLogger.logEvent('click_miss', { x: x, y: y, targetX: this.target.x, targetY: this.target.y, targetRadius: this.target.w / 2, targetIndex: this.currentPosition });
 		}
 	},
 
@@ -253,12 +276,16 @@ var fittsTest = {
 			// Check if the mouse is inside the target area
 			const isInsideTarget = distance({ x: x, y: y }, this.target) < (this.target.w / 2);
 
-			if (isInsideTarget && !this.isInsideTarget) {
-				this.targetEntries++; // Increment target entry count
-				this.isInsideTarget = true; // Mark as inside target
+		if (isInsideTarget && !this.isInsideTarget) {
+				this.targetEntries++;
+				this.isInsideTarget = true;
 				console.log("Target entered: " + this.targetEntries);
+				if (_warnIfNoEventLogger()) EventLogger.logEvent('cursor_enter_target', { cursorX: x, cursorY: y, targetX: this.target.x, targetY: this.target.y, targetRadius: this.target.w / 2, targetIndex: this.currentPosition });
+			} else if (!isInsideTarget && this.isInsideTarget) {
+				this.isInsideTarget = false;
+				if (_warnIfNoEventLogger()) EventLogger.logEvent('cursor_exit_target', { cursorX: x, cursorY: y, targetX: this.target.x, targetY: this.target.y, targetRadius: this.target.w / 2, targetIndex: this.currentPosition });
 			} else if (!isInsideTarget) {
-				this.isInsideTarget = false; // Reset flag when the user exits the target
+				this.isInsideTarget = false;
 			}
 
 			this.last = { x: x, y: y, t: (new Date).getTime() };
@@ -452,6 +479,17 @@ function startExperience() {
 	let condition = conditionSelect.value;
 	console.log('start experience, condition: ' + condition);
 
+	if (_warnIfNoEventLogger()) {
+		if (trialNum === 1) {
+			EventLogger.startSession({
+				participantId: document.getElementById('button-pad-id').value,
+				trialType: 'fitts',
+				sessionId: sessionId
+			});
+		}
+		EventLogger.startTrial(trialNum);
+	}
+
 	if (condition === '1') {
 		fittsTest.advanceParams(300, 75);
 	}
@@ -474,6 +512,7 @@ function startExperience() {
 
 	startScreen.style.display = "none";
 	experienceScreen.style.display = "";
+	if (_warnIfNoEventLogger()) EventLogger.startCursorTrace(testAreaSVG.node());
 }
 
 function endExperience() {
@@ -555,6 +594,31 @@ function endExperience() {
 	startText.innerText = `#${trialNum} C:${conditionSelect.value} TTC:${elapsedStr}s ID:${idStr} IDe:${ideStr} TP:${tpStr} CT:${ct} TE:${te} TCD:${tcd}px\n` + startText.innerText;
 
 	submitForm(trialNum, conditionSelect.value, idStr, ideStr, tpStr, elapsedStr, ct, cot, te, tcd);
+
+	if (_warnIfNoEventLogger()) {
+		EventLogger.endTrial({
+			trialNum: trialNum,
+			condition: conditionSelect.value,
+			timeToComplete: elapsedStr,
+			indexOfDifficulty: idStr,
+			effectiveId: ideStr,
+			throughput: tpStr,
+			clicksTotal: ct,
+			clicksOnTarget: cot,
+			targetEntries: te,
+			dragCount: dragCount,
+			totalCursorDistance: tcd
+		});
+		EventLogger.stopCursorTrace();
+		EventLogger.downloadLog();
+		EventLogger.clearLog();
+		const currentTrialNum = trialNum;
+		const currentConditionNum = conditionSelect.value;
+		setTimeout(() => {
+			EventLogger.downloadCursorTrace({ trialNum: currentTrialNum, condition: currentConditionNum });
+			EventLogger.clearCursorTrace();
+		}, 500);
+	}
 
 	trialNum += 1;
 

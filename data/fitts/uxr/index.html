@@ -62,6 +62,12 @@
 	</div>
 
 	<script type="text/javascript" src="fitts-law.js"></script>
+	<script>
+		if (new URLSearchParams(window.location.search).get('offsetDown') === 'true') {
+			document.getElementById('experience-screen').style.marginTop = '150px';
+			document.getElementById('start-screen').style.marginTop = '150px';
+		}
+	</script>
 
 	</div> <!-- container12 end -->
 

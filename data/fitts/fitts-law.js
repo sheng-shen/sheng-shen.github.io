@@ -83,6 +83,7 @@ function resetTrialData() {
 // Event listener for mouse movement
 document.addEventListener('mousemove', () => {
 	const currentMousePosition = { x: event.clientX, y: event.clientY };
+	EventLogger.updateCursorPosition(event.clientX, event.clientY);
 	if (lastMousePosition.x === currentMousePosition.x && lastMousePosition.y === currentMousePosition.y) {
         return;
     }
@@ -491,6 +492,7 @@ function startExperience() {
 
 	startScreen.style.display = "none";
 	experienceScreen.style.display = "";
+	EventLogger.startCursorTrace(testAreaSVG.node());
 }
 
 function endExperience() {
@@ -573,8 +575,17 @@ function endExperience() {
 		startText.innerText = `#${trialNum} C:${currentCondition} TTC:${elapsedStr}s ID:${idStr} IDe:${ideStr} TP:${tpStr} CT:${ct} TE:${te} TCD:${tcd}px\n` + startText.innerText;
 		submitForm(trialNum, currentCondition, idStr, ideStr, tpStr, elapsedStr, ct, cot, te, tcd);
 		EventLogger.endTrial({ trialNum: trialNum, condition: currentCondition, timeToComplete: elapsedStr, indexOfDifficulty: idStr, effectiveId: ideStr, throughput: tpStr, clicksTotal: ct, clicksOnTarget: cot, targetEntries: te, dragCount: dragCount, totalCursorDistance: tcd });
+		EventLogger.stopCursorTrace();
 		EventLogger.downloadLog();
 		EventLogger.clearLog();
+		const currentTrialNum = trialNum;
+		const currentConditionNum = currentCondition;
+		setTimeout(() => {
+			EventLogger.downloadCursorTrace({ trialNum: currentTrialNum, condition: currentConditionNum });
+		}, 500);
+	} else {
+		EventLogger.stopCursorTrace();
+		EventLogger.clearCursorTrace();
 	}
 
 	trialNum += 1;

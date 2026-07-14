@@ -128,10 +128,19 @@ var EventLogger = (function () {
     }
 
     function getDownloadPayload() {
-        return {
+        var payload = {
             metadata: _sessionMetadata,
             trials: _trials.slice()
         };
+        if (_cursorTrace.length > 0) {
+            payload.cursorTrace = {
+                samplingHz: _cursorHz,
+                traceStart: _cursorTraceStart,
+                targetSvgBoundingRect: _cursorTraceTargetSvgRect,
+                samples: _cursorTrace.slice()
+            };
+        }
+        return payload;
     }
 
     function _generateFilename() {
@@ -189,6 +198,7 @@ var EventLogger = (function () {
         _trials = [];
         _currentTrialEvents = [];
         _lastDownloadedAt = null;
+        _cursorTrace = [];
     }
 
     // Expose per-trial state getters/setters for instrumentation code

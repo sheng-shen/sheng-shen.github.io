@@ -586,11 +586,6 @@ function endExperience() {
 		EventLogger.stopCursorTrace();
 		EventLogger.downloadLog();
 		EventLogger.clearLog();
-		const currentTrialNum = trialNum;
-		const currentConditionNum = currentCondition;
-		setTimeout(() => {
-			EventLogger.downloadCursorTrace({ trialNum: currentTrialNum, condition: currentConditionNum });
-		}, 500);
 	} else {
 		EventLogger.stopCursorTrace();
 		EventLogger.clearCursorTrace();

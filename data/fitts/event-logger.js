@@ -5,7 +5,8 @@
 "use strict";
 
 var EventLogger = (function () {
-    var _enabled = new URLSearchParams(window.location.search).get('eventLog') === 'true';
+    var _urlParams = new URLSearchParams(window.location.search);
+    var _enabled = _urlParams.get('eventLog') === 'true';
 
     var _sessionMetadata = null;
     var _currentTrialEvents = [];
@@ -17,6 +18,24 @@ var EventLogger = (function () {
     // Per-trial state flags, reset by startTrial()
     var _isInTarget = false;
     var _isInZoomTarget = false;
+
+    // Cursor trace state
+    var _cursorHz = (function () {
+        var raw = parseFloat(_urlParams.get('cursorHz'));
+        if (isNaN(raw) || raw <= 0 || raw > 240) return 60;
+        return Math.max(1, Math.min(240, raw));
+    })();
+    var _cursorTraceInterval = 1000 / _cursorHz;
+    var _GAP_THRESHOLD_MS = 100;
+
+    var _latestCursorPos = null;
+    var _cursorTrace = [];
+    var _cursorTraceRafId = null;
+    var _lastRecordedCursor = null;
+    var _cursorTraceStart = null;
+    var _lastRecordedTime = 0;
+    var _lastRafTimestamp = null;
+    var _cursorTraceTargetSvgRect = null;
 
     function _createDownloadButton() {
         var btn = document.createElement('button');
@@ -178,6 +197,110 @@ var EventLogger = (function () {
     function getIsInZoomTarget() { return _isInZoomTarget; }
     function setIsInZoomTarget(v) { _isInZoomTarget = v; }
 
+    function updateCursorPosition(x, y) {
+        if (!_enabled) return;
+        _latestCursorPos = { x: x, y: y };
+    }
+
+    function startCursorTrace(svgElement) {
+        if (!_enabled) return;
+        cancelAnimationFrame(_cursorTraceRafId);
+        _cursorTrace = [];
+        _lastRecordedTime = 0;
+        _lastRecordedCursor = null;
+        _latestCursorPos = null;
+        _lastRafTimestamp = null;
+        _cursorTraceStart = Date.now();
+_cursorTraceTargetSvgRect = null;
+        if (svgElement) {
+            var rect = svgElement.getBoundingClientRect();
+            _cursorTraceTargetSvgRect = { x: rect.x, y: rect.y, width: rect.width, height: rect.height, top: rect.top, left: rect.left };
+        }
+
+        function rafLoop(timestamp) {
+            var rafDelta = null;
+            if (_lastRafTimestamp !== null) {
+                rafDelta = timestamp - _lastRafTimestamp;
+            }
+            _lastRafTimestamp = timestamp;
+
+            var now = performance.now();
+            if (_lastRecordedTime > 0 && (now - _lastRecordedTime) < _cursorTraceInterval) {
+                _cursorTraceRafId = requestAnimationFrame(rafLoop);
+                return;
+            }
+
+            if (rafDelta !== null && rafDelta > _GAP_THRESHOLD_MS) {
+                _cursorTrace.push({ t: Date.now(), x: null, y: null, marker: 'trace_resumed' });
+            }
+
+            if (_latestCursorPos === null) {
+                _cursorTraceRafId = requestAnimationFrame(rafLoop);
+                return;
+            }
+
+            if (_lastRecordedCursor && _latestCursorPos.x === _lastRecordedCursor.x && _latestCursorPos.y === _lastRecordedCursor.y) {
+                _cursorTraceRafId = requestAnimationFrame(rafLoop);
+                return;
+            }
+
+            _cursorTrace.push({ t: Date.now(), x: _latestCursorPos.x, y: _latestCursorPos.y });
+            _lastRecordedTime = now;
+            _lastRecordedCursor = { x: _latestCursorPos.x, y: _latestCursorPos.y };
+            _cursorTraceRafId = requestAnimationFrame(rafLoop);
+        }
+
+        _cursorTraceRafId = requestAnimationFrame(rafLoop);
+        console.debug('[EventLogger] Cursor trace started at ' + _cursorHz + 'Hz');
+    }
+
+    function stopCursorTrace() {
+        if (!_enabled) return;
+        cancelAnimationFrame(_cursorTraceRafId);
+        _cursorTraceRafId = null;
+        console.debug('[EventLogger] Cursor trace stopped, ' + _cursorTrace.length + ' samples');
+    }
+
+    function downloadCursorTrace(metadata) {
+        if (!_enabled) return;
+        if (_cursorTrace.length === 0) return;
+        var payload = {
+            metadata: {
+                participantId: (_sessionMetadata && _sessionMetadata.participantId) || '',
+                trialType: (_sessionMetadata && _sessionMetadata.trialType) || '',
+                sessionId: (_sessionMetadata && _sessionMetadata.sessionId) || '',
+                trialNum: metadata && metadata.trialNum,
+                condition: metadata && metadata.condition,
+                samplingHz: _cursorHz,
+                traceStart: _cursorTraceStart,
+                targetSvgBoundingRect: _cursorTraceTargetSvgRect,
+                userAgent: navigator.userAgent,
+                platform: navigator.platform
+            },
+            cursorTrace: _cursorTrace.slice()
+        };
+        var pid = payload.metadata.participantId || 'unknown';
+        var tNum = (metadata && metadata.trialNum) || 0;
+        var ts = new Date().toISOString().replace(/[:.]/g, '-');
+        var filename = pid + '_fitts_cursor_trial' + tNum + '_' + ts + '.json';
+        var json = JSON.stringify(payload, null, 2);
+        var blob = new Blob([json], { type: 'application/json' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        console.debug('[EventLogger] Cursor trace downloaded: ' + filename);
+    }
+
+    function clearCursorTrace() {
+        if (!_enabled) return;
+        _cursorTrace = [];
+    }
+
     return {
         isEnabled: isEnabled,
         startSession: startSession,
@@ -191,6 +314,11 @@ var EventLogger = (function () {
         getIsInTarget: getIsInTarget,
         setIsInTarget: setIsInTarget,
         getIsInZoomTarget: getIsInZoomTarget,
-        setIsInZoomTarget: setIsInZoomTarget
+        setIsInZoomTarget: setIsInZoomTarget,
+        startCursorTrace: startCursorTrace,
+        stopCursorTrace: stopCursorTrace,
+        updateCursorPosition: updateCursorPosition,
+        downloadCursorTrace: downloadCursorTrace,
+        clearCursorTrace: clearCursorTrace
     };
 })();

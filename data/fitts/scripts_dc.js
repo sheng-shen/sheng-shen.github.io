@@ -28,6 +28,7 @@ let isGesturing = false;
 let gestureStopTimeout = null;
 let sessionId;
 let isPractice = false;
+var suppressNextSelectionChange = false;
 
 class RandomGenerator {
     constructor(seed) {
@@ -513,7 +514,14 @@ function highlightRandomPhraseSelection() {
 
 
 function selectionChangedHandler() {
-    trackGesture();
+    if (suppressNextSelectionChange) {
+        suppressNextSelectionChange = false;
+        return;
+    }
+    var gestureTargetIndex = successfulClicks;
+    var gestureHighlight = document.querySelector('.highlight');
+    var gestureTargetText = gestureHighlight ? gestureHighlight.textContent : '';
+    trackGesture(200, 'selection', function() { return { targetIndex: gestureTargetIndex, targetText: gestureTargetText, selectedText: window.getSelection().toString() }; });
     const selection = window.getSelection().toString();                    // Get the user's selection
     const highlightedClasses = document.querySelector('.highlight');     // Get the highlighted text
 
@@ -526,10 +534,12 @@ function selectionChangedHandler() {
 
     if (selection === targetText) { // Check if the user's selection exactly matches the highlighted text
         console.log('User selected the highlighted text! Getting a new phrase.');
+        suppressNextSelectionChange = true;
         removeHighlight();
         highlightRandomPhraseSelection();
         playChime(true);
         successfulClicks += 1;
+        if (!isPractice) EventLogger.logEvent('selection_success', { targetIndex: successfulClicks, targetText: targetText, selectedText: selection });
 
         if (successfulClicks >= MAX_SELECTION_TRIALS) {
             // End experience
@@ -546,10 +556,15 @@ function selectionChangedHandler() {
                 let elapsedStr = (elapsed / 1000).toFixed(2)
                 startText.innerText = `#${trialNum}, TTC: ${elapsedStr}s, Gestures: ${gestureCount}\n` + startText.innerText;
                 submitForm(trialNum, elapsedStr, gestureCount);
+                EventLogger.endTrial({ trialNum: trialNum, timeToComplete: elapsedStr, gestureCount: gestureCount });
+                EventLogger.downloadLog();
+                EventLogger.clearLog();
             }
 
             trialNum += 1;
         }
+    } else if (selection.length > 0) {
+        if (!isPractice) EventLogger.logEvent('selection_miss', { targetIndex: successfulClicks, targetText: targetText, selectedText: selection });
     }
 }
 
@@ -595,6 +610,16 @@ function startTextSelectionExperience() {
     successfulClicks = 0;
     gestureCount = 0;
     loadChimes();
+
+    if (!isPractice) {
+        EventLogger.startSession({
+            participantId: document.getElementById('button-pad-id').value,
+            trialType: 'textselection',
+            sessionId: sessionId
+        });
+        EventLogger.startTrial(1);
+    }
+
     document.getElementById('start-screen').style.display = "none";
     document.getElementById('textselection-body').style.display = "";
 

@@ -90,10 +90,10 @@ document.addEventListener('mousemove', () => {
 	lastMousePosition = currentMousePosition;
 
     if (!isMoving) {
-        // Mouse just started moving
         isMoving = true;
-        dragCount++; // Increment drag count for this new movement
+        dragCount++;
         console.log(`Drag Count: ${dragCount}`);
+        EventLogger.logEvent('movement_start', { x: currentMousePosition.x, y: currentMousePosition.y });
     }
 
     // Reset the stop timeout for every movement
@@ -101,8 +101,9 @@ document.addEventListener('mousemove', () => {
 
     // Set a timeout to detect when the mouse stops
     stopTimeout = setTimeout(() => {
-        isMoving = false; // Mouse has stopped
-    }, 100); // Adjust timeout duration as needed
+        isMoving = false;
+        EventLogger.logEvent('movement_stop', { x: lastMousePosition.x, y: lastMousePosition.y });
+    }, 100);
 });
 
 function v(v) {
@@ -216,6 +217,7 @@ var fittsTest = {
 
 		if (isHit) {
 			this.clicksOnTarget++;
+			EventLogger.logEvent('click_target', { x: x, y: y, targetX: this.target.x, targetY: this.target.y, targetRadius: this.target.w / 2 });
 			if (!this.active) {
 				console.log('start active');
 				startTimer();
@@ -247,6 +249,7 @@ var fittsTest = {
 		}
 		else {
 			this.miss++;
+			EventLogger.logEvent('click_miss', { x: x, y: y, targetX: this.target.x, targetY: this.target.y, targetRadius: this.target.w / 2 });
 		}
 	},
 
@@ -267,11 +270,15 @@ var fittsTest = {
 			const isInsideTarget = distance({ x: x, y: y }, this.target) < (this.target.w / 2);
 
 			if (isInsideTarget && !this.isInsideTarget) {
-				this.targetEntries++; // Increment target entry count
-				this.isInsideTarget = true; // Mark as inside target
+				this.targetEntries++;
+				this.isInsideTarget = true;
 				console.log("Target entered: " + this.targetEntries);
+				EventLogger.logEvent('cursor_enter_target', { cursorX: x, cursorY: y, targetX: this.target.x, targetY: this.target.y, targetRadius: this.target.w / 2 });
+			} else if (!isInsideTarget && this.isInsideTarget) {
+				this.isInsideTarget = false;
+				EventLogger.logEvent('cursor_exit_target', { cursorX: x, cursorY: y, targetX: this.target.x, targetY: this.target.y, targetRadius: this.target.w / 2 });
 			} else if (!isInsideTarget) {
-				this.isInsideTarget = false; // Reset flag when the user exits the target
+				this.isInsideTarget = false;
 			}
 
 			this.last = { x: x, y: y, t: (new Date).getTime() };
@@ -466,6 +473,12 @@ function startExperience() {
 	currentCondition = condition;
 	console.log('start experience, condition: ' + condition);
 
+	var participantId = document.getElementById('button-pad-id').value;
+	if (trialNum === 1) {
+		EventLogger.startSession({ participantId: participantId, trialType: 'fitts', sessionId: sessionId });
+	}
+	EventLogger.startTrial(trialNum);
+
 	if (condition === '2') {
 		fittsTest.advanceParams(300, 38);
 	}
@@ -559,6 +572,9 @@ function endExperience() {
 	if (!isPractice) {
 		startText.innerText = `#${trialNum} C:${currentCondition} TTC:${elapsedStr}s ID:${idStr} IDe:${ideStr} TP:${tpStr} CT:${ct} TE:${te} TCD:${tcd}px\n` + startText.innerText;
 		submitForm(trialNum, currentCondition, idStr, ideStr, tpStr, elapsedStr, ct, cot, te, tcd);
+		EventLogger.endTrial({ trialNum: trialNum, condition: currentCondition, timeToComplete: elapsedStr, indexOfDifficulty: idStr, effectiveId: ideStr, throughput: tpStr, clicksTotal: ct, clicksOnTarget: cot, targetEntries: te, dragCount: dragCount, totalCursorDistance: tcd });
+		EventLogger.downloadLog();
+		EventLogger.clearLog();
 	}
 
 	trialNum += 1;

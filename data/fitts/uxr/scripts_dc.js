@@ -28,6 +28,15 @@ let isGesturing = false;
 let gestureStopTimeout = null;
 let sessionId;
 
+let _eventLoggerWarnShown = false;
+function _warnIfNoEventLogger() {
+    if (typeof EventLogger === 'undefined' && !_eventLoggerWarnShown) {
+        console.warn('[UXR] EventLogger is not loaded — event logging is inactive. Add ?eventLog=true to enable.');
+        _eventLoggerWarnShown = true;
+    }
+    return typeof EventLogger !== 'undefined';
+}
+
 class RandomGenerator {
     constructor(seed) {
         // If no seed is provided, use Math.random() to generate one
@@ -69,15 +78,21 @@ function playChime(success) {
     }
 }
 
-function trackGesture(timeout = 200) {
+function trackGesture(timeout = 200, gesturePrefix, dataFn) {
     if (!isGesturing) {
         isGesturing = true;
         gestureCount++;
         console.log(`[gesture] new gesture #${gestureCount}`);
+        if (_warnIfNoEventLogger() && gesturePrefix) {
+            EventLogger.logEvent(gesturePrefix + '_start', dataFn ? dataFn() : {});
+        }
     }
     clearTimeout(gestureStopTimeout);
     gestureStopTimeout = setTimeout(() => {
         isGesturing = false;
+        if (_warnIfNoEventLogger() && gesturePrefix) {
+            EventLogger.logEvent(gesturePrefix + '_end', dataFn ? dataFn() : {});
+        }
     }, timeout);
 }
 
@@ -279,7 +294,14 @@ function highlightRandomPhraseScroll() {
         let elapsedStr = (elapsed / 1000).toFixed(2)
         startText.innerText = `#${trialNum}, TTC: ${elapsedStr}s, Gestures: ${gestureCount}\n` + startText.innerText;
         submitForm(trialNum, elapsedStr, gestureCount);
+        if (_warnIfNoEventLogger()) {
+            EventLogger.endTrial({ trialNum: trialNum, timeToComplete: elapsedStr, gestureCount: gestureCount });
+            EventLogger.downloadLog();
+            EventLogger.clearLog();
+        }
         trialNum += 1;
+    } else {
+        if (_warnIfNoEventLogger()) EventLogger.setIsInTarget(false);
     }
 }
 
@@ -341,22 +363,64 @@ function showUpDownArrows() {
     }
 }
 
+function _getScrollPositionData() {
+    var container = document.getElementById('scroll-container');
+    var highlight = document.querySelector('.highlight');
+    var targetbox = document.getElementById('targetbox');
+    var data = { targetIndex: successfulClicks, scrollTop: container ? Math.round(container.scrollTop) : null };
+    if (targetbox) {
+        var tr = targetbox.getBoundingClientRect();
+        data.targetBoxTop = Math.round(tr.top);
+        data.targetBoxBottom = Math.round(tr.bottom);
+        if (highlight) {
+            var hr = highlight.getBoundingClientRect();
+            var gapAbove = tr.top - hr.top;
+            var gapBelow = hr.bottom - tr.bottom;
+            if (hr.bottom <= tr.top) {
+                data.highlightOffsetFromTarget = Math.round(hr.bottom - tr.top);
+            } else if (hr.top >= tr.bottom) {
+                data.highlightOffsetFromTarget = Math.round(hr.top - tr.bottom);
+            } else if (gapAbove > 0 || gapBelow > 0) {
+                data.highlightOffsetFromTarget = Math.round(Math.max(gapAbove, gapBelow));
+            } else {
+                data.highlightOffsetFromTarget = 0;
+            }
+        }
+    }
+    if (highlight && container) {
+        var hr = hr || highlight.getBoundingClientRect();
+        var containerRect = container.getBoundingClientRect();
+        data.highlightPageTop = Math.round(hr.top - containerRect.top + container.scrollTop);
+        data.highlightPageBottom = Math.round(hr.bottom - containerRect.top + container.scrollTop);
+    }
+    return data;
+}
+
 function onScrollCallback() {
-    trackGesture(100);
-    // If the highlight is in the target box, wait and check again. If still in, make a new highlight
+    trackGesture(100, 'scroll', _getScrollPositionData);
     clearTimeout(highlightTimeout);
     showUpDownArrows();
 
-    if (isHighlightInTargetbox()) {
+    var inTarget = isHighlightInTargetbox();
+    if (inTarget && _warnIfNoEventLogger() && !EventLogger.getIsInTarget()) {
+        EventLogger.setIsInTarget(true);
+        EventLogger.logEvent('enter_target_threshold', Object.assign({ targetIndex: successfulClicks }, _getScrollPositionData()));
+    } else if (!inTarget && _warnIfNoEventLogger() && EventLogger.getIsInTarget()) {
+        EventLogger.setIsInTarget(false);
+        EventLogger.logEvent('exit_target_threshold', Object.assign({ targetIndex: successfulClicks }, _getScrollPositionData()));
+    }
+
+    if (inTarget) {
         highlightTimeout = setTimeout(() => {
-            if (isHighlightInTargetbox()) {   // check if still in target zone
+            if (isHighlightInTargetbox()) {
                 successfulClicks += 1;
                 console.log(`click ${successfulClicks}`);
+                if (_warnIfNoEventLogger()) EventLogger.logEvent('scroll_success', Object.assign({ targetIndex: successfulClicks }, _getScrollPositionData()));
                 removeHighlight();
                 highlightRandomPhraseScroll();
                 playChime(true);
             }
-        }, 300); // Highlight will be removed after 0.5 seconds
+        }, 300);
     }
 }
 
@@ -365,6 +429,17 @@ function startScrollExperience() {
     successfulClicks = 0;
     gestureCount = 0;
     loadChimes();
+
+    if (_warnIfNoEventLogger()) {
+        EventLogger.startSession({
+            participantId: document.getElementById('button-pad-id').value,
+            trialType: 'scroll',
+            sessionId: sessionId
+        });
+        EventLogger.startTrial(1);
+        EventLogger.setIsInTarget(false);
+    }
+
     document.getElementById('start-screen').style.display = "none";
     document.getElementById('scroll-body').style.display = "";
 

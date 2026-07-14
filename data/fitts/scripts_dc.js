@@ -358,7 +358,7 @@ function _getScrollPositionData() {
     var container = document.getElementById('scroll-container');
     var highlight = document.querySelector('.highlight');
     var targetbox = document.getElementById('targetbox');
-    var data = { scrollTop: container ? Math.round(container.scrollTop) : null };
+    var data = { targetIndex: successfulClicks, scrollTop: container ? Math.round(container.scrollTop) : null };
     if (targetbox) {
         var tr = targetbox.getBoundingClientRect();
         data.targetBoxTop = Math.round(tr.top);
@@ -401,10 +401,10 @@ function onScrollCallback() {
     var inTarget = isHighlightInTargetbox();
     if (inTarget && !EventLogger.getIsInTarget()) {
         EventLogger.setIsInTarget(true);
-        EventLogger.logEvent('enter_target_threshold', _getScrollPositionData());
+        EventLogger.logEvent('enter_target_threshold', Object.assign({ targetIndex: successfulClicks }, _getScrollPositionData()));
     } else if (!inTarget && EventLogger.getIsInTarget()) {
         EventLogger.setIsInTarget(false);
-        EventLogger.logEvent('exit_target_threshold', _getScrollPositionData());
+        EventLogger.logEvent('exit_target_threshold', Object.assign({ targetIndex: successfulClicks }, _getScrollPositionData()));
     }
 
     if (inTarget) {
@@ -412,6 +412,7 @@ function onScrollCallback() {
             if (isHighlightInTargetbox()) {
                 successfulClicks += 1;
                 console.log(`click ${successfulClicks}`);
+                EventLogger.logEvent('scroll_success', Object.assign({ targetIndex: successfulClicks }, _getScrollPositionData()));
                 removeHighlight();
                 highlightRandomPhraseScroll();
                 playChime(true);

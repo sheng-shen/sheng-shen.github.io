@@ -1,3 +1,10 @@
+// ============================================================================
+// Copied from /data/fitts/event-logger.js on 2026-07-14.
+// This is a self-contained copy for the UXR directory (consistent with UXR's
+// pattern of keeping its own copies of all dependencies).
+// If the parent version is updated, this copy may need to be refreshed.
+// ============================================================================
+
 /**
  * (c) Meta Platforms, Inc. and affiliates. Confidential and proprietary.
  */

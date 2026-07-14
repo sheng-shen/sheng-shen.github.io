@@ -24,6 +24,7 @@ const TOUCH_ZOOM_SENSITIVITY = 1 / 2.5;
 
 function _getZoomData() {
     return {
+        targetIndex: successfulClicks,
         currentSize: zoomInnerBaseSize * zoomCurrentScale,
         zoomTargetSize: zoomTargetSize,
         zoomMinSize: zoomMinSize,
@@ -157,10 +158,10 @@ function checkZoomMatch() {
 
     if (inBounds && !EventLogger.getIsInZoomTarget()) {
         EventLogger.setIsInZoomTarget(true);
-        EventLogger.logEvent('zoom_enter_target', { currentSize: currentSize, zoomTargetSize: zoomTargetSize, zoomMinSize: zoomMinSize, zoomMaxSize: zoomMaxSize, zoomCurrentScale: zoomCurrentScale });
+        EventLogger.logEvent('zoom_enter_target', { targetIndex: successfulClicks, currentSize: currentSize, zoomTargetSize: zoomTargetSize, zoomMinSize: zoomMinSize, zoomMaxSize: zoomMaxSize, zoomCurrentScale: zoomCurrentScale });
     } else if (!inBounds && EventLogger.getIsInZoomTarget()) {
         EventLogger.setIsInZoomTarget(false);
-        EventLogger.logEvent('zoom_exit_target', { currentSize: currentSize, zoomTargetSize: zoomTargetSize, zoomMinSize: zoomMinSize, zoomMaxSize: zoomMaxSize, zoomCurrentScale: zoomCurrentScale });
+        EventLogger.logEvent('zoom_exit_target', { targetIndex: successfulClicks, currentSize: currentSize, zoomTargetSize: zoomTargetSize, zoomMinSize: zoomMinSize, zoomMaxSize: zoomMaxSize, zoomCurrentScale: zoomCurrentScale });
     }
 
     if (inBounds) {
@@ -177,7 +178,7 @@ function onZoomSuccess() {
     if (successfulClicks >= MAX_ZOOM_TRIALS) return;
     successfulClicks += 1;
     playChime(true);
-    EventLogger.logEvent('zoom_success', { zoomCurrentScale: zoomCurrentScale, currentSize: zoomInnerBaseSize * zoomCurrentScale, zoomTargetSize: zoomTargetSize, successfulClicks: successfulClicks });
+    EventLogger.logEvent('zoom_success', { targetIndex: successfulClicks, zoomCurrentScale: zoomCurrentScale, currentSize: zoomInnerBaseSize * zoomCurrentScale, zoomTargetSize: zoomTargetSize, successfulClicks: successfulClicks });
 
     if (successfulClicks >= MAX_ZOOM_TRIALS) {
         document.getElementById('start-screen').style.display = "";
@@ -194,9 +195,7 @@ function onZoomSuccess() {
         }
         trialNum += 1;
     } else {
-        EventLogger.endTrial({ trialNum: successfulClicks, zoomCurrentScale: zoomCurrentScale });
         generateZoomTarget();
-        EventLogger.startTrial(successfulClicks + 1);
         EventLogger.setIsInZoomTarget(false);
     }
 }

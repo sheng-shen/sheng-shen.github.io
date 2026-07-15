@@ -17,6 +17,8 @@ if (typeof _warnIfNoEventLogger === 'undefined') {
 }
 
 let zoomCurrentScale = 1.0;
+let zoomCursorX = null;
+let zoomCursorY = null;
 let zoomTargetSize = 0;
 let zoomMinSize = 0;
 let zoomMaxSize = 0;
@@ -119,7 +121,9 @@ function updateZoomUI() {
         zoomCurrentScale: zoomCurrentScale,
         zoomTargetScale: zoomTargetSize / zoomInnerBaseSize,
         targetIndex: successfulClicks,
-        zoomThresholdOffset: Math.round(currentSize < zoomMinSize ? currentSize - zoomMinSize : currentSize > zoomMaxSize ? currentSize - zoomMaxSize : 0)
+        zoomThresholdOffset: Math.round(currentSize < zoomMinSize ? currentSize - zoomMinSize : currentSize > zoomMaxSize ? currentSize - zoomMaxSize : 0),
+        x: zoomCursorX,
+        y: zoomCursorY
     });
 }
 
@@ -184,6 +188,27 @@ function checkZoomMatch() {
     }
 }
 
+function zoomMouseMoveHandler(e) {
+    zoomCursorX = Math.round(e.clientX);
+    zoomCursorY = Math.round(e.clientY);
+    var currentSize = zoomInnerBaseSize * zoomCurrentScale;
+    EventLogger.updateTrace('zoomValue', {
+        zoomCurrentScale: zoomCurrentScale,
+        zoomTargetScale: zoomTargetSize / zoomInnerBaseSize,
+        targetIndex: successfulClicks,
+        zoomThresholdOffset: Math.round(currentSize < zoomMinSize ? currentSize - zoomMinSize : currentSize > zoomMaxSize ? currentSize - zoomMaxSize : 0),
+        x: zoomCursorX,
+        y: zoomCursorY
+    });
+}
+
+function zoomTouchMoveHandler(e) {
+    if (e.touches.length > 0) {
+        zoomCursorX = Math.round(e.touches[0].clientX);
+        zoomCursorY = Math.round(e.touches[0].clientY);
+    }
+}
+
 function onZoomSuccess() {
     if (successfulClicks >= MAX_ZOOM_TRIALS) return;
     successfulClicks += 1;
@@ -200,6 +225,8 @@ function onZoomSuccess() {
         submitForm(trialNum, elapsedStr, gestureCount);
         if (_warnIfNoEventLogger()) {
             EventLogger.stopTrace('zoomValue');
+            document.removeEventListener('mousemove', zoomMouseMoveHandler);
+            document.removeEventListener('touchmove', zoomTouchMoveHandler);
             EventLogger.endTrial({ trialNum: trialNum, timeToComplete: elapsedStr, gestureCount: gestureCount });
             EventLogger.downloadLog();
             EventLogger.clearLog();
@@ -231,6 +258,8 @@ function startZoomExperience() {
         EventLogger.startTrial(1);
         EventLogger.setIsInZoomTarget(false);
         EventLogger.startTrace('zoomValue');
+        document.addEventListener('mousemove', zoomMouseMoveHandler);
+        document.addEventListener('touchmove', zoomTouchMoveHandler);
     }
 
     document.getElementById('start-screen').style.display = "none";

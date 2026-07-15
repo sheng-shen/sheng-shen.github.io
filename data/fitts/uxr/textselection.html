@@ -131,6 +131,10 @@
         const EXPERIENCE_NAME = "Text Selection";
         const EXPLANATION = 'Select the highlighted text.';
         setExperienceTitle(EXPERIENCE_NAME, EXPLANATION);
+        if (new URLSearchParams(window.location.search).get('offsetDown') === 'true') {
+            document.getElementById('textselection-body').style.marginTop = '-20px';
+            document.getElementById('start-screen').style.marginTop = '-20px';
+        }
     </script>
 
 

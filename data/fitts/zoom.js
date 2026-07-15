@@ -111,6 +111,12 @@ function updateZoomUI() {
     innerSquare.style.height = `${currentSize}px`;
     const inBounds = currentSize >= zoomMinSize && currentSize <= zoomMaxSize;
     innerSquare.style.backgroundColor = inBounds ? '#81c784' : '#7ec8e3';
+    EventLogger.updateTrace('zoomValue', {
+        zoomCurrentScale: zoomCurrentScale,
+        zoomTargetScale: zoomTargetSize / zoomInnerBaseSize,
+        targetIndex: successfulClicks,
+        zoomThresholdOffset: Math.round(currentSize < zoomMinSize ? currentSize - zoomMinSize : currentSize > zoomMaxSize ? currentSize - zoomMaxSize : 0)
+    });
 }
 
 function generateZoomTarget() {
@@ -185,6 +191,7 @@ function onZoomSuccess() {
         document.getElementById('zoom-body').style.display = "none";
 
         if (!isPractice) {
+            EventLogger.stopTrace('zoomValue');
             let startText = document.getElementById('start-text');
             let elapsedStr = (elapsed / 1000).toFixed(2);
             startText.innerText = `#${trialNum}, TTC: ${elapsedStr}s, Gestures: ${gestureCount}\n` + startText.innerText;
@@ -213,6 +220,10 @@ function startZoomExperience() {
     EventLogger.startSession({ participantId: participantId, trialType: 'zoom', sessionId: sessionId });
     EventLogger.startTrial(1);
     EventLogger.setIsInZoomTarget(false);
+
+    if (!isPractice) {
+        EventLogger.startTrace('zoomValue');
+    }
 
     document.getElementById('start-screen').style.display = "none";
     document.getElementById('zoom-body').style.display = "";

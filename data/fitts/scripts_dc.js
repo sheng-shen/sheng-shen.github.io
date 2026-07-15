@@ -29,6 +29,8 @@ let gestureStopTimeout = null;
 let sessionId;
 let isPractice = false;
 var suppressNextSelectionChange = false;
+var isTextSelectionDragging = false;
+var lastSelectionMissText = null;
 
 class RandomGenerator {
     constructor(seed) {
@@ -283,6 +285,7 @@ function highlightRandomPhraseScroll() {
         document.getElementById('scroll-body').removeEventListener('scroll', onScrollCallback);
 
         if (!isPractice) {
+            EventLogger.stopTrace('scrollPosition');
             let startText = document.getElementById('start-text');
             let elapsedStr = (elapsed / 1000).toFixed(2)
             startText.innerText = `#${trialNum}, TTC: ${elapsedStr}s, Gestures: ${gestureCount}\n` + startText.innerText;
@@ -396,6 +399,12 @@ function _getScrollPositionData() {
 
 function onScrollCallback() {
     trackGesture(100, 'scroll', _getScrollPositionData);
+    var scrollData = _getScrollPositionData();
+    EventLogger.updateTrace('scrollPosition', {
+        scrollTop: scrollData.scrollTop,
+        targetIndex: successfulClicks,
+        highlightOffsetFromTarget: scrollData.highlightOffsetFromTarget
+    });
     clearTimeout(highlightTimeout);
     showUpDownArrows();
 
@@ -439,6 +448,10 @@ function startScrollExperience() {
     document.getElementById('scroll-container').addEventListener('scroll', onScrollCallback);
 
     document.getElementById('scroll-container').scrollTop = 0;
+
+    if (!isPractice) {
+        EventLogger.startTrace('scrollPosition');
+    }
 
     highlightRandomPhraseScroll();
 
@@ -513,16 +526,37 @@ function highlightRandomPhraseSelection() {
 }
 
 
+function textSelectionMouseMoveHandler(e) {
+    EventLogger.updateTrace('textSelectionCursor', { x: Math.round(e.clientX), y: Math.round(e.clientY), isDragging: isTextSelectionDragging });
+}
+
+function textSelectionTouchMoveHandler(e) {
+    if (e.touches.length > 0) {
+        EventLogger.updateTrace('textSelectionCursor', { x: Math.round(e.touches[0].clientX), y: Math.round(e.touches[0].clientY), isDragging: isTextSelectionDragging });
+    }
+}
+
+function textSelectionDragStartHandler() {
+    isTextSelectionDragging = true;
+    var highlight = document.querySelector('.highlight');
+    EventLogger.logEvent('pointer_down', { targetIndex: successfulClicks, targetText: highlight ? highlight.textContent : '' });
+}
+
+function textSelectionDragEndHandler() {
+    isTextSelectionDragging = false;
+}
+
 function selectionChangedHandler() {
+    if (isTextSelectionDragging) {
+        var pointerUpHighlight = document.querySelector('.highlight');
+        EventLogger.logEvent('pointer_up', { targetIndex: successfulClicks, targetText: pointerUpHighlight ? pointerUpHighlight.textContent : '', selectedText: window.getSelection().toString() });
+    }
     if (suppressNextSelectionChange) {
         suppressNextSelectionChange = false;
         return;
     }
-    var gestureTargetIndex = successfulClicks;
-    var gestureHighlight = document.querySelector('.highlight');
-    var gestureTargetText = gestureHighlight ? gestureHighlight.textContent : '';
-    trackGesture(200, 'selection', function() { return { targetIndex: gestureTargetIndex, targetText: gestureTargetText, selectedText: window.getSelection().toString() }; });
-    const selection = window.getSelection().toString();                    // Get the user's selection
+    trackGesture(200);
+    const selection = window.getSelection().toString();
     const highlightedClasses = document.querySelector('.highlight');     // Get the highlighted text
 
     if (highlightedClasses === null)
@@ -535,6 +569,7 @@ function selectionChangedHandler() {
     if (selection === targetText) { // Check if the user's selection exactly matches the highlighted text
         console.log('User selected the highlighted text! Getting a new phrase.');
         suppressNextSelectionChange = true;
+        lastSelectionMissText = null;
         removeHighlight();
         highlightRandomPhraseSelection();
         playChime(true);
@@ -552,6 +587,13 @@ function selectionChangedHandler() {
             document.removeEventListener('selectionchange', selectionChangeHandler);
 
             if (!isPractice) {
+                EventLogger.stopTrace('textSelectionCursor');
+                document.removeEventListener('mousemove', textSelectionMouseMoveHandler);
+                document.removeEventListener('touchmove', textSelectionTouchMoveHandler);
+                document.removeEventListener('mousedown', textSelectionDragStartHandler);
+                document.removeEventListener('touchstart', textSelectionDragStartHandler);
+                document.removeEventListener('mouseup', textSelectionDragEndHandler);
+                document.removeEventListener('touchend', textSelectionDragEndHandler);
                 let startText = document.getElementById('start-text');
                 let elapsedStr = (elapsed / 1000).toFixed(2)
                 startText.innerText = `#${trialNum}, TTC: ${elapsedStr}s, Gestures: ${gestureCount}\n` + startText.innerText;
@@ -564,7 +606,10 @@ function selectionChangedHandler() {
             trialNum += 1;
         }
     } else if (selection.length > 0) {
-        if (!isPractice) EventLogger.logEvent('selection_miss', { targetIndex: successfulClicks, targetText: targetText, selectedText: selection });
+        if (!isPractice && selection !== lastSelectionMissText) {
+            lastSelectionMissText = selection;
+            EventLogger.logEvent('selection_miss', { targetIndex: successfulClicks, targetText: targetText, selectedText: selection });
+        }
     }
 }
 
@@ -611,6 +656,8 @@ function startTextSelectionExperience() {
     gestureCount = 0;
     loadChimes();
 
+    isTextSelectionDragging = false;
+
     if (!isPractice) {
         EventLogger.startSession({
             participantId: document.getElementById('button-pad-id').value,
@@ -634,6 +681,16 @@ function startTextSelectionExperience() {
 
     // Listen for selection change events (mobile drag handles)
     document.addEventListener('selectionchange', selectionChangeHandler);
+
+    if (!isPractice) {
+        EventLogger.startTrace('textSelectionCursor');
+        document.addEventListener('mousemove', textSelectionMouseMoveHandler);
+        document.addEventListener('touchmove', textSelectionTouchMoveHandler);
+        document.addEventListener('mousedown', textSelectionDragStartHandler);
+        document.addEventListener('touchstart', textSelectionDragStartHandler);
+        document.addEventListener('mouseup', textSelectionDragEndHandler);
+        document.addEventListener('touchend', textSelectionDragEndHandler);
+    }
 
     startTimer();
 }

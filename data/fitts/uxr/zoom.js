@@ -115,6 +115,12 @@ function updateZoomUI() {
     innerSquare.style.height = `${currentSize}px`;
     const inBounds = currentSize >= zoomMinSize && currentSize <= zoomMaxSize;
     innerSquare.style.backgroundColor = inBounds ? '#81c784' : '#7ec8e3';
+    EventLogger.updateTrace('zoomValue', {
+        zoomCurrentScale: zoomCurrentScale,
+        zoomTargetScale: zoomTargetSize / zoomInnerBaseSize,
+        targetIndex: successfulClicks,
+        zoomThresholdOffset: Math.round(currentSize < zoomMinSize ? currentSize - zoomMinSize : currentSize > zoomMaxSize ? currentSize - zoomMaxSize : 0)
+    });
 }
 
 function generateZoomTarget() {
@@ -193,6 +199,7 @@ function onZoomSuccess() {
         startText.innerText = `#${trialNum}, TTC: ${elapsedStr}s, Gestures: ${gestureCount}\n` + startText.innerText;
         submitForm(trialNum, elapsedStr, gestureCount);
         if (_warnIfNoEventLogger()) {
+            EventLogger.stopTrace('zoomValue');
             EventLogger.endTrial({ trialNum: trialNum, timeToComplete: elapsedStr, gestureCount: gestureCount });
             EventLogger.downloadLog();
             EventLogger.clearLog();
@@ -223,6 +230,7 @@ function startZoomExperience() {
         });
         EventLogger.startTrial(1);
         EventLogger.setIsInZoomTarget(false);
+        EventLogger.startTrace('zoomValue');
     }
 
     document.getElementById('start-screen').style.display = "none";

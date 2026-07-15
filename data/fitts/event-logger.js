@@ -37,6 +37,9 @@ var EventLogger = (function () {
     var _lastRafTimestamp = null;
     var _cursorTraceTargetSvgRect = null;
 
+    // Generic trace state
+    var _traces = {};
+
     function _createDownloadButton() {
         var btn = document.createElement('button');
         btn.id = 'download-log-btn';
@@ -140,6 +143,25 @@ var EventLogger = (function () {
                 samples: _cursorTrace.slice()
             };
         }
+        var hasTraces = false;
+        for (var traceName in _traces) {
+            if (_traces[traceName].samples.length > 0) {
+                hasTraces = true;
+                break;
+            }
+        }
+        if (hasTraces) {
+            payload.traces = {};
+            for (var traceName in _traces) {
+                if (_traces[traceName].samples.length > 0) {
+                    payload.traces[traceName] = {
+                        samplingHz: _cursorHz,
+                        traceStart: _traces[traceName].traceStart,
+                        samples: _traces[traceName].samples.slice()
+                    };
+                }
+            }
+        }
         return payload;
     }
 
@@ -199,6 +221,12 @@ var EventLogger = (function () {
         _currentTrialEvents = [];
         _lastDownloadedAt = null;
         _cursorTrace = [];
+        for (var traceName in _traces) {
+            if (_traces[traceName].rafId) {
+                cancelAnimationFrame(_traces[traceName].rafId);
+            }
+        }
+        _traces = {};
     }
 
     // Expose per-trial state getters/setters for instrumentation code
@@ -321,6 +349,121 @@ _cursorTraceTargetSvgRect = null;
         _cursorTrace = [];
     }
 
+    function startTrace(name, options) {
+        if (!_enabled) return;
+        if (_traces[name] && _traces[name].rafId) {
+            cancelAnimationFrame(_traces[name].rafId);
+        }
+        var maxSamples = (options && options.maxSamples != null) ? options.maxSamples : null;
+        var trace = {
+            latestData: null,
+            samples: [],
+            rafId: null,
+            lastRecorded: null,
+            lastRecordedTime: 0,
+            lastRafTimestamp: null,
+            traceStart: Date.now(),
+            maxSamples: maxSamples
+        };
+        _traces[name] = trace;
+
+        function rafLoop(timestamp) {
+            var rafDelta = null;
+            if (trace.lastRafTimestamp !== null) {
+                rafDelta = timestamp - trace.lastRafTimestamp;
+            }
+            trace.lastRafTimestamp = timestamp;
+
+            var now = performance.now();
+            if (trace.lastRecordedTime > 0 && (now - trace.lastRecordedTime) < _cursorTraceInterval) {
+                trace.rafId = requestAnimationFrame(rafLoop);
+                return;
+            }
+
+            if (rafDelta !== null && rafDelta > _GAP_THRESHOLD_MS) {
+                trace.samples.push({ t: Date.now(), marker: 'trace_resumed' });
+            }
+
+            if (trace.latestData === null) {
+                trace.rafId = requestAnimationFrame(rafLoop);
+                return;
+            }
+
+            if (trace.lastRecorded) {
+                var keys = Object.keys(trace.latestData);
+                var same = true;
+                for (var i = 0; i < keys.length; i++) {
+                    if (trace.latestData[keys[i]] !== trace.lastRecorded[keys[i]]) {
+                        same = false;
+                        break;
+                    }
+                }
+                if (same) {
+                    trace.rafId = requestAnimationFrame(rafLoop);
+                    return;
+                }
+            }
+
+            if (trace.maxSamples !== null && trace.samples.length >= trace.maxSamples) {
+                trace.samples.push({ t: Date.now(), marker: 'max_samples_reached' });
+                trace.rafId = null;
+                return;
+            }
+
+            var sample = { t: Date.now() };
+            var dataKeys = Object.keys(trace.latestData);
+            for (var i = 0; i < dataKeys.length; i++) {
+                sample[dataKeys[i]] = trace.latestData[dataKeys[i]];
+            }
+            trace.samples.push(sample);
+            trace.lastRecordedTime = now;
+            var recorded = {};
+            for (var i = 0; i < dataKeys.length; i++) {
+                recorded[dataKeys[i]] = trace.latestData[dataKeys[i]];
+            }
+            trace.lastRecorded = recorded;
+            trace.rafId = requestAnimationFrame(rafLoop);
+        }
+
+        trace.rafId = requestAnimationFrame(rafLoop);
+        console.debug('[EventLogger] Trace "' + name + '" started at ' + _cursorHz + 'Hz');
+    }
+
+    function updateTrace(name, data) {
+        if (!_traces[name]) return;
+        _traces[name].latestData = data;
+    }
+
+    function stopTrace(name) {
+        if (!_traces[name]) return;
+        var trace = _traces[name];
+        if (trace.latestData !== null) {
+            var changed = false;
+            if (!trace.lastRecorded) {
+                changed = true;
+            } else {
+                var keys = Object.keys(trace.latestData);
+                for (var i = 0; i < keys.length; i++) {
+                    if (trace.latestData[keys[i]] !== trace.lastRecorded[keys[i]]) {
+                        changed = true;
+                        break;
+                    }
+                }
+            }
+            if (changed) {
+                var sample = { t: Date.now() };
+                var dataKeys = Object.keys(trace.latestData);
+                for (var i = 0; i < dataKeys.length; i++) {
+                    sample[dataKeys[i]] = trace.latestData[dataKeys[i]];
+                }
+                trace.samples.push(sample);
+            }
+        }
+        cancelAnimationFrame(trace.rafId);
+        trace.rafId = null;
+        console.debug('[EventLogger] Trace "' + name + '" stopped, ' + trace.samples.length + ' samples');
+    }
+
     return {
         isEnabled: isEnabled,
         startSession: startSession,
@@ -339,6 +482,9 @@ _cursorTraceTargetSvgRect = null;
         stopCursorTrace: stopCursorTrace,
         updateCursorPosition: updateCursorPosition,
         downloadCursorTrace: downloadCursorTrace,
-        clearCursorTrace: clearCursorTrace
+        clearCursorTrace: clearCursorTrace,
+        startTrace: startTrace,
+        updateTrace: updateTrace,
+        stopTrace: stopTrace
     };
 })();

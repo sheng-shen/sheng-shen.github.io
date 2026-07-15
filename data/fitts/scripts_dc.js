@@ -28,6 +28,29 @@ let isGesturing = false;
 let gestureStopTimeout = null;
 let sessionId;
 let isPractice = false;
+var scrollCursorX = null;
+var scrollCursorY = null;
+
+function scrollMouseMoveHandler(e) {
+    scrollCursorX = Math.round(e.clientX);
+    scrollCursorY = Math.round(e.clientY);
+    var scrollData = _getScrollPositionData();
+    EventLogger.updateTrace('scrollPosition', {
+        scrollTop: scrollData.scrollTop,
+        targetIndex: successfulClicks,
+        highlightOffsetFromTarget: scrollData.highlightOffsetFromTarget,
+        x: scrollCursorX,
+        y: scrollCursorY
+    });
+}
+
+function scrollTouchMoveHandler(e) {
+    if (e.touches.length > 0) {
+        scrollCursorX = Math.round(e.touches[0].clientX);
+        scrollCursorY = Math.round(e.touches[0].clientY);
+    }
+}
+
 var suppressNextSelectionChange = false;
 var isTextSelectionDragging = false;
 var lastSelectionMissText = null;
@@ -286,6 +309,8 @@ function highlightRandomPhraseScroll() {
 
         if (!isPractice) {
             EventLogger.stopTrace('scrollPosition');
+            document.removeEventListener('mousemove', scrollMouseMoveHandler);
+            document.removeEventListener('touchmove', scrollTouchMoveHandler);
             let startText = document.getElementById('start-text');
             let elapsedStr = (elapsed / 1000).toFixed(2)
             startText.innerText = `#${trialNum}, TTC: ${elapsedStr}s, Gestures: ${gestureCount}\n` + startText.innerText;
@@ -403,7 +428,9 @@ function onScrollCallback() {
     EventLogger.updateTrace('scrollPosition', {
         scrollTop: scrollData.scrollTop,
         targetIndex: successfulClicks,
-        highlightOffsetFromTarget: scrollData.highlightOffsetFromTarget
+        highlightOffsetFromTarget: scrollData.highlightOffsetFromTarget,
+        x: scrollCursorX,
+        y: scrollCursorY
     });
     clearTimeout(highlightTimeout);
     showUpDownArrows();
@@ -451,6 +478,8 @@ function startScrollExperience() {
 
     if (!isPractice) {
         EventLogger.startTrace('scrollPosition');
+        document.addEventListener('mousemove', scrollMouseMoveHandler);
+        document.addEventListener('touchmove', scrollTouchMoveHandler);
     }
 
     highlightRandomPhraseScroll();

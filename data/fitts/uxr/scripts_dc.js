@@ -27,6 +27,29 @@ let gestureCount = 0;
 let isGesturing = false;
 let gestureStopTimeout = null;
 let sessionId;
+var scrollCursorX = null;
+var scrollCursorY = null;
+
+function scrollMouseMoveHandler(e) {
+    scrollCursorX = Math.round(e.clientX);
+    scrollCursorY = Math.round(e.clientY);
+    var scrollData = _getScrollPositionData();
+    EventLogger.updateTrace('scrollPosition', {
+        scrollTop: scrollData.scrollTop,
+        targetIndex: successfulClicks,
+        highlightOffsetFromTarget: scrollData.highlightOffsetFromTarget,
+        x: scrollCursorX,
+        y: scrollCursorY
+    });
+}
+
+function scrollTouchMoveHandler(e) {
+    if (e.touches.length > 0) {
+        scrollCursorX = Math.round(e.touches[0].clientX);
+        scrollCursorY = Math.round(e.touches[0].clientY);
+    }
+}
+
 var suppressNextSelectionChange = false;
 var isTextSelectionDragging = false;
 var lastSelectionMissText = null;
@@ -299,6 +322,8 @@ function highlightRandomPhraseScroll() {
         submitForm(trialNum, elapsedStr, gestureCount);
         if (_warnIfNoEventLogger()) {
             EventLogger.stopTrace('scrollPosition');
+            document.removeEventListener('mousemove', scrollMouseMoveHandler);
+            document.removeEventListener('touchmove', scrollTouchMoveHandler);
             EventLogger.endTrial({ trialNum: trialNum, timeToComplete: elapsedStr, gestureCount: gestureCount });
             EventLogger.downloadLog();
             EventLogger.clearLog();
@@ -406,7 +431,9 @@ function onScrollCallback() {
     EventLogger.updateTrace('scrollPosition', {
         scrollTop: scrollData.scrollTop,
         targetIndex: successfulClicks,
-        highlightOffsetFromTarget: scrollData.highlightOffsetFromTarget
+        highlightOffsetFromTarget: scrollData.highlightOffsetFromTarget,
+        x: scrollCursorX,
+        y: scrollCursorY
     });
     clearTimeout(highlightTimeout);
     showUpDownArrows();
@@ -449,6 +476,8 @@ function startScrollExperience() {
         EventLogger.startTrial(1);
         EventLogger.setIsInTarget(false);
         EventLogger.startTrace('scrollPosition');
+        document.addEventListener('mousemove', scrollMouseMoveHandler);
+        document.addEventListener('touchmove', scrollTouchMoveHandler);
     }
 
     document.getElementById('start-screen').style.display = "none";
